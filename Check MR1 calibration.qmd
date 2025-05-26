@@ -1,0 +1,161 @@
+---
+title: "Check MR1 calibration"
+author: "Baptiste schmid"
+format: html
+editor: visual
+---
+
+```{r packages}
+#| echo: false
+library(tidyverse)
+library(yaml)
+library(dplyr)
+```
+
+## Calibrate MR1
+
+Multiple MR1 radar can run in close proximity (few meters aprat) to check and correct their calibration.
+
+How to:
+
+get data from the echo table
+
+Create scatterplot of max_level by height (feaure1)
+
+-   filter by short pulse
+
+-   filter by class
+
+-   filter by wingbeat frequency
+
+## Load Database Configuration
+
+```{r setup}
+# Load the YAML configuration
+config_yaml <- "
+databases:
+  - dbname: 'CH_HiRAD1bs223_2025'
+    startTime: '2025-05-09'
+    stopTime: '2025-05-20'
+  
+  - dbname: 'CH_HiRAD1bs225_2025'
+    startTime: '2025-05-09'
+    stopTime: '2025-05-20'
+  
+  - dbname: 'CH_HiRAD1bs226_2025'
+    startTime: '2025-05-09'
+    stopTime: '2025-05-20'
+  
+  - dbname: 'CH_HiRAD1bs227_2025'
+    startTime: '2025-05-09'
+    stopTime: '2025-05-20'
+"
+
+# Parse the YAML configuration
+config <- yaml.load(config_yaml)
+
+# Convert to data frame for easier manipulation
+db_config <- do.call(rbind, lapply(config$databases, data.frame))
+
+print("Database Configuration Loaded:")
+print(db_config)
+```
+
+## Database Summary
+
+```{r summary}
+# Display configuration summary
+cat("Number of databases:", nrow(db_config), "\n")
+cat("Date range:", unique(db_config$startTime), "to", unique(db_config$stopTime), "\n")
+cat("Database names:\n")
+for(i in 1:nrow(db_config)) {
+  cat("-", db_config$dbname[i], "\n")
+}
+```
+
+## Process Each Database
+
+```{r set database user and pwd}
+dbUser =  rstudioapi::askForPassword("Database user") # can be hard coded, e.g. 'sa'
+dbPwd =  rstudioapi::askForPassword("Database password") # can be hard oded, e.g. '123pwd'
+
+```
+
+```{r process}
+# Example of processing each database 
+for(i in 1:nrow(db_config)) { # i <- 1
+  db <- db_config[i, ] 
+  cat("Processing database:", db$dbname, "\n")
+  cat("  Start:", db$startTime, "\n") 
+  cat(" Stop:", db$stopTime, "\n") 
+  
+  # Add your database processing logic here 
+  
+  #- Connect to SQL-server
+  dbServer = "dbradar\\RadarData" # "server\\instance"
+  dbName = db$dbname
+  dbDriverChar = "SQL Server"
+  
+  # For PC configuration
+  dsn = paste0(
+        "driver=", dbDriverChar, ";server=", dbServer,
+        ";database=", dbName,
+        ";uid=", dbUser,
+        ";pwd=", dbPwd
+      )
+  dbConnection = RODBC::odbcDriverConnect(dsn)
+ 
+  # save the connection to a table as an object
+  #- Get radar and site tables from the database
+  dbo_collection <- tbl(dbConnection, "collection") 
+
+  dbo_rf_class <- tbl(dbConnection, "rf_classification") 
+ 
+  dbo_rf_classprob <- tbl(dbConnection, "rf_class_probability") 
+
+  dbo_rf_classdef <- tbl(dbConnection, "rfclasses") 
+
+  dbo_rf_features <- tbl(dbConnection, "echo_rffeature_map") 
+
+  dbo_rf_featdef <- tbl(dbConnection, "rffeatures") 
+
+  dbo_protocol <- tbl(dbConnection, "protocol") 
+
+  
+  # Fetch the data
+  echo_i <-
+    dbo_collection %>% 
+    full_join(., dbo_rf_class, by = c("row" = "echo"), suffix = c("", ""))  %>%
+    full_join(., dbo_rf_classdef, by = c("class" = "id"), suffix = c("", ""))  %>%
+    full_join(., dbo_rf_classprob, by = c("row" = "echo"), suffix = c("", "_prob"))  %>% # add class prob and MTR-factor
+    full_join(., dbo_rf_features, by = c("row" = "echo"), suffix = c("", "_feature"))  %>% # add two columns: 'feature' und 'value_feature'
+    filter(feature == "109" | feature == "167" | feature == "168") %>% # select a few features of interest from dbo_rf_feature$feature
+    full_join(., dbo_protocol, by = "protocolID", suffix = c("", "_protocol"))  %>%
+    select(my_col$colname_org) %>%
+    rename_all(~my_col$colname_new) %>%
+    tbl_df %>%
+    spread("feature_key", "feature_value") %>% # from long to wide format of the single class probabilities
+    collect() # only then the sql-query will be performed.
+  echo_i <- rename("rcs_14" = "109","wbf" = "167", "wbf_cred" = "168")
+  
+  if(i == 1){
+    echo = echo_i
+  } else {
+    echo = rbind(echo, echo_i)
+  }
+  
+  cat("\n") 
+}
+```
+
+```{}
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
