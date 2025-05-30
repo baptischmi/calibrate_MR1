@@ -169,14 +169,46 @@ if(file.exists(rds_path)){
 ```
 
 ```{r get counts of echoes}
-# Create the summarized and pivoted table
-echo_table <- echo %>%
+# Create table with counts per radarID for each date and day/night
+date_daynight_table <- echo %>%
+  select(radarID, date_sunset, dayNight) %>%
+  count(date_sunset, dayNight, radarID) %>%
+  pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
+
+# Display date/day-night table
+kable(date_daynight_table, caption = "Counts per Radar ID by Date and Day/Night")
+
+
+```
+
+```{r}
+# Find the two dates (date_sunset x dayNight) with maximum counts
+max_dates <- echo %>%
+  select(date_sunset, dayNight) %>%
+  count(date_sunset, dayNight) %>%
+  arrange(desc(n)) %>%
+  slice_head(n = 2)
+
+# Filter echo data to only include the two dates with maximum counts
+echo_filtered <- echo %>%
+  semi_join(max_dates, by = c("date_sunset", "dayNight"))
+
+# Create the summarized and pivoted table per class and radarID using filtered data
+echo_table <- echo_filtered %>%
   select(radarID, class) %>%
   count(class, radarID) %>%
   pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
 
-# Display as HTML table
+# Display class table as HTML table
 kable(echo_table, caption = "Echo Class by Radar ID")
+# # Create the summarized and pivoted table
+# echo_table <- echo %>%
+#   select(radarID, class) %>%
+#   count(class, radarID) %>%
+#   pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
+# 
+# # Display as HTML table
+# kable(echo_table, caption = "Echo Class by Radar ID")
 ```
 
 ```{r process issue dbConnect}
