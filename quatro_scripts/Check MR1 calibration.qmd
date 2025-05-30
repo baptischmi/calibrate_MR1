@@ -1,0 +1,380 @@
+---
+title: "Check MR1 calibration"
+author: "Baptiste schmid"
+format: html
+editor: visual
+execute:
+  echo: false
+---
+
+```{r packages}
+#| echo: false
+#| message: false
+library(tidyverse)
+library(knitr)
+library(dbplyr)
+library(yaml)
+library(dplyr)
+library(birdscanR)
+```
+
+```{r}
+mainOutputDir <- "C:/Users/bs/OneDrive - Vogelwarte/31403 Radartechnik/SBRS divers/Calibration_MR1/Rooftop_2025"
+```
+
+## Calibrate MR1
+
+Multiple MR1 radar can run in close proximity (few meters aprat) to check and correct their calibration.
+
+How to:
+
+get data from the echo table
+
+Create scatterplot of max_level (feature14) by height (feaure1)
+
+-   filter by short pulse
+
+-   filter by class
+
+-   filter by wingbeat frequency
+
+## Load Database Configuration
+
+```{r setup calibration 2025}
+#| eval: true
+#| warning: false
+# Load the YAML configuration
+config_yaml <- "
+databases:
+  - dbname: 'CH_HiRAD3bs223_2025'
+    startTime: '2025-05-13 14:00'
+    stopTime: '2025-05-20 00:00'
+    siteLocation: c(47.494427, 8.716432)
+    radarTimeZone: 'Etc/GMT0'
+  
+  - dbname: 'CH_HiRAD1bs225_2025'
+    startTime: '2025-05-13 14:00'
+    stopTime: '2025-05-20 00:00'
+    siteLocation: c(47.494427, 8.716432)
+    radarTimeZone: 'Etc/GMT0'
+  
+  - dbname: 'CH_HiRAD2bs226_2025'
+    startTime: '2025-05-13 14:00'
+    stopTime: '2025-05-20 00:00'
+    siteLocation: c(47.494427, 8.716432)
+    radarTimeZone: 'Etc/GMT0'
+  
+  - dbname: 'CH_HiRAD4bs227_2025'
+    startTime: '2025-05-13 14:00'
+    stopTime: '2025-05-20 00:00'
+    siteLocation: c(47.494427, 8.716432)
+    radarTimeZone: 'Etc/GMT0'
+"
+
+# Parse the YAML configuration
+config <- yaml.load(config_yaml)
+
+# Convert to data frame for easier manipulation
+db_config <- do.call(rbind, lapply(config$databases, data.frame))
+
+print("Database Configuration Loaded:")
+# print(db_config)
+```
+
+## Database Summary
+
+```{r summary}
+#| echo: false
+# Display configuration summary
+cat("Number of databases:", nrow(db_config), "\n")
+cat("Date range:", unique(db_config$startTime), "to", unique(db_config$stopTime), "\n")
+cat("Database names:\n")
+for(i in 1:nrow(db_config)) {
+  cat("-", db_config$dbname[i], "\n")
+}
+```
+
+## Process Each Database
+
+```{r set database user and pwd}
+#| warning: false
+dbUser =  'sa' # rstudioapi::askForPassword("Database user") # can be hard coded, e.g. 'sa'
+dbPwd = 'radar' # rstudioapi::askForPassword("Database password") # can be hard oded, e.g. '123pwd'
+
+```
+
+```{r extract DB data with birdscanR}
+#| warning: false
+#| message: false
+
+rds_file <- paste0("Calibration_EchoData", paste(db_config$dbname, collapse = "_"), ".rds")
+rds_path <- file.path(mainOutputDir, rds_file)
+
+if(file.exists(rds_path)){
+  echo <- readRDS(rds_path)
+} else{
+
+  # # query the databases
+  for(i in 1:nrow(db_config)) { # i <- 1
+    i_db <- db_config[i, ] 
+    cat("Processing database:", i_db$dbname, "\n")
+    cat("  Start:", i_db$startTime, "\n") 
+    cat(" Stop:", i_db$stopTime, "\n") 
+    
+    #- extrcat data from DB
+    i_dbData = extractDbData(
+      dbDriverChar = "SQL Server",
+      dbServer = "dbradar\\RadarData",
+      dbName = i_db$dbname,
+      dbUser = dbUser,
+      dbPwd = dbPwd,
+      saveDbToFile = FALSE,
+      dbDataDir = mainOutputDir,
+      radarTimeZone = i_db$radarTimeZone,
+      targetTimeZone = i_db$radarTimeZone,
+      #timeInterval = c(i_db$startTime, i_db$stopTime)
+      listOfRfFeaturesToExtract = c(167, 168),
+      siteLocation = c(47.494427, 8.716432), # i_db$siteLocation
+      sunOrCivil = "civil",
+      crepuscule = "nauticalSolar"
+     ) 
+    
+  i_echo <- i_dbData$echoData %>% 
+    left_join(., i_dbData$protocolData, by = 'protocolID') %>% 
+    mutate(radarID = i_dbData$siteData$radarID,
+           transmitPower = i_dbData$siteData$transmitPower,
+           year = year(dateSunset)
+           ) %>% 
+    filter(time_stamp_targetTZ >= i_db$startTime & time_stamp_targetTZ <= i_db$stopTime) %>% 
+    select(echoID, protocolID, stc_level, time_stamp_originTZ, time_stamp_targetTZ, time_string, dateSunset, year, 
+           fs, feature1.altitude_AGL, feature2.azimuth, feature3.speed, feature14.maxLevel, feature17.rcs, feature19.durationOfEcho, feature37.speed, 
+           WFF_credibility, WFF_predicted, class, class_probability, mtr_factor_rf, #mtr_factor_sphereDiaCm, 
+           siteID, pulseType, rotate, stc, threshold, radarID, transmitPower)
+      
+  
+    if(i == 1){
+      echo = i_echo
+    } else {
+      echo = rbind(echo, i_echo)
+    }
+    
+    rm(list = ls(pattern = "^i_"))
+    cat("\n") 
+  }
+  # save echo dataset to mainoutputdir
+  saveRDS(echo, rds_path)
+}
+
+
+```
+
+```{r get counts of echoes}
+# Create the summarized and pivoted table
+echo_table <- echo %>%
+  select(radarID, class) %>%
+  count(class, radarID) %>%
+  pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
+
+# Display as HTML table
+kable(echo_table, caption = "Echo Class by Radar ID")
+```
+
+```{r process issue dbConnect}
+#| eval: false
+#| echo: false
+
+rds_name <- paste0("Calibration_EchoDataset", paste(db_config$dbname, collapse="_"), ".rds")
+rds_path <- file.path(mainOutputDir, rds_name)
+if(file.exists(file.path())){
+  echo <- readRDS(rds_path)
+} else {
+  
+  for(i in 1:nrow(db_config)) { # i <- 1
+    db <- db_config[i, ] 
+    cat("Processing database:", db$dbname, "\n")
+    cat("  Start:", db$startTime, "\n") 
+    cat(" Stop:", db$stopTime, "\n") 
+    
+    #- Connect to SQL-server
+    dbServer = "dbradar\\RadarData" # "server\\instance"
+    dbName = db$dbname
+    dbDriverChar = "SQL Server"
+    
+    # For PC configuration
+    # dsn = paste0(
+    #       "driver=", dbDriverChar, ";server=", dbServer,
+    #       ";database=", dbName,
+    #       ";uid=", dbUser,
+    #       ";pwd=", dbPwd
+    # )
+    # dbConnection = RODBC::odbcDriverConnect(dsn)
+    
+    con <- DBI::dbConnect(odbc::odbc(),
+                          Driver = 'SQL Server',
+                          Server = dbServer,
+                          Database = dbName,
+                          UID = dbUser,
+                          PWD = dbPwd,
+                          # Trusted_Connection = "Yes",
+                          Port =1433
+    )
+    dbConnection = DBI::dbConnect(con)
+    
+   
+    # save the connection to a table as an object
+    #- Get radar and site tables from the database
+    dbo_collection <- tbl(dbConnection, "collection") 
+  
+    dbo_rf_class <- tbl(dbConnection, "rf_classification") 
+   
+    dbo_rf_classprob <- tbl(dbConnection, "rf_class_probability") 
+  
+    dbo_rf_classdef <- tbl(dbConnection, "rfclasses") 
+  
+    dbo_rf_features <- tbl(dbConnection, "echo_rffeature_map") 
+  
+    dbo_rf_featdef <- tbl(dbConnection, "rffeatures") 
+  
+    dbo_protocol <- tbl(dbConnection, "protocol") 
+  
+    
+    # Fetch the data
+    echo_i <-
+      dbo_collection %>% 
+      full_join(., dbo_rf_class, by = c("row" = "echo"), suffix = c("", ""))  %>%
+      full_join(., dbo_rf_classdef, by = c("class" = "id"), suffix = c("", ""))  %>%
+      full_join(., dbo_rf_classprob, by = c("row" = "echo"), suffix = c("", "_prob"))  %>% # add class prob and MTR-factor
+      full_join(., dbo_rf_features, by = c("row" = "echo"), suffix = c("", "_feature"))  %>% # add two columns: 'feature' und 'value_feature'
+      filter(feature == "109" | feature == "167" | feature == "168") %>% # select a few features of interest from dbo_rf_feature$feature
+      full_join(., dbo_protocol, by = "protocolID", suffix = c("", "_protocol"))  %>%
+      select(my_col$colname_org) %>%
+      rename_all(~my_col$colname_new) %>%
+      tbl_df %>%
+      spread("feature_key", "feature_value") %>% # from long to wide format of the single class probabilities
+      collect() # only then the sql-query will be performed.
+    echo_i <- rename("rcs_14" = "109","wbf" = "167", "wbf_cred" = "168")
+    
+    if(i == 1){
+      echo = echo_i
+    } else {
+      echo = rbind(echo, echo_i)
+    }
+    
+    cat("\n") 
+  }
+  saveRDS(echo, rds_path)
+}
+
+```
+
+## Visualize
+
+```{r scatter plot}
+#| warning: false
+#| 
+
+# Assuming your data is stored in a variable called radar_data
+# Filter the data based on the given criteria
+wbf_lower <- 5
+wbf_upper <- 250
+wbf_min_cred <- 0 # 0.6
+class_sel <- 'all_echoes' # 'passerine'# 'all_birds'
+filtered_data <- echo
+# filtered_data <- echo %>%
+#   filter(
+#     if(class_sel == 'passerine')
+#     class == class_sel
+#     ) %>% 
+#     filter(
+#       WFF_predicted >= wbf_lower & WFF_predicted <= wbf_upper,
+#       WFF_credibility > wbf_min_cred 
+#   ) %>%
+#   # Create year column from dateSunset
+#   mutate(year = year(dateSunset))
+
+# Create a data frame with unique transmitPower values for each radarID and year combination
+transmitPower_labels <- filtered_data %>%
+  group_by(radarID, year) %>%
+  summarize(
+    transmitPower = first(transmitPower),
+    # Calculate positions for upper left corner of each panel
+    x_pos = min(feature14.maxLevel),  # Leftmost x value
+    y_pos = max(feature1.altitude_AGL),     # Topmost y value
+    .groups = "drop"
+  )
+
+# Create the plot with the transmitPower labels added in the upper left corner
+passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1.altitude_AGL)) +
+  # Add points
+  geom_point(alpha = 0.3, color = "blue") +
+  # Add quantile isolines (at 25%, 50%, 75%, and 95%)
+  geom_density_2d(aes(color = after_stat(level)), bins = 4) +
+  scale_color_viridis_c(option = "plasma", name = "Density") +
+  # Add transmitPower label in the upper left corner of each panel
+  geom_text(
+    data = transmitPower_labels,
+    aes(x = x_pos, y = y_pos, label = paste0("Psent: ", transmitPower, " kW")),
+    hjust = 0, vjust = 1,  # Horizontal justify left (0), vertical justify top (1)
+    color = "black", size = 3, fontface = "bold",
+    nudge_x = 0.5,  # Small nudge to prevent text from touching the axis
+    nudge_y = -5    # Small nudge down from the top edge
+  ) +
+  # Facet by radarID and year (keep original faceting)
+  facet_grid(year ~ radarID) +
+  # Add labels and title
+  labs(
+    title = paste0( ifelse(class_sel == 'passerine', "Passerine class", "All classes"), " (WBF [", wbf_lower, ",", wbf_upper, "], Cred > 0.6)" ),
+    subtitle = "Height vs Max Level with Density Isolines",
+    x = "Maximum Reflectivity Level (dBZ)",
+    y = "Height (m)",
+    caption = "Note: Isolines represent density quantiles (25%, 50%, 75%, 95%)"
+  ) +
+  # Theme adjustments
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "lightgray"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+
+# Display the plot
+print(passerine_plot)
+
+
+# Save the plot to a file
+# For a basic PNG file
+file_name <- paste0( "Dbz vs height for", ifelse(class_sel == 'passerine', "Passerine class", "All classes"), " WBF ", wbf_lower, "to", wbf_upper, ".png" )
+ggsave(filename = file.path(mainOutputDir, file_name), 
+       plot = passerine_plot, width = 12, height = 8, dpi = 300)
+
+
+
+
+# If there are too many radarID and year combinations, consider creating a function
+# to generate plots for specific combinations or using a loop
+# For example:
+
+plot_radar_year <- function(data, radarID_val, year_val) {
+  subset_data <- data %>%
+    filter(radarID == radarID_val, year == year_val)
+  
+  ggplot(subset_data, aes(x = feature14.maxLevel, y = feature1.altitude_AGL)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_density_2d(aes(color = after_stat(level)), bins = 4) +
+    scale_color_viridis_c(option = "plasma", name = "Density") +
+    labs(
+      title = paste("Passerine Type Detections for Radar", radar_id_val, "in", year_val),
+      subtitle = "Height vs Max Level with Density Isolines (WBF Cred > 0.6)",
+      x = "Maximum Reflectivity Level (dBZ)",
+      y = "Height (m)"
+    ) +
+    theme_minimal()
+}
+
+# Example usage:
+# plot_radar_year(filtered_data, 3220, 2023)
+
+
+
+```
