@@ -178,16 +178,21 @@ date_daynight_table <- echo %>%
 # Display date/day-night table
 kable(date_daynight_table, caption = "Counts per Radar ID by Date and Day/Night")
 
-
 ```
 
+Counts per class for the DAY with maximal number of echoes
+
 ```{r}
-# Find the two dates (dateSunset x dayOrNight) with maximum counts
+# Find the N (n = 1) dates (dateSunset x dayOrNight) with maximum counts
+t_dayOrNight = 'day'
 max_dates <- echo %>%
+  filter(dayOrNight == t_dayOrNight) %>% 
   select(dateSunset, dayOrNight) %>%
   count(dateSunset, dayOrNight) %>%
   arrange(desc(n)) %>%
-  slice_head(n = 2)
+  slice_head(n = 1)
+t_date <- as.Date(max_dates$dateSunset)
+
 
 # Filter echo data to only include the two dates with maximum counts
 echo_filtered <- echo %>%
@@ -200,15 +205,36 @@ echo_table <- echo_filtered %>%
   pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
 
 # Display class table as HTML table
-kable(echo_table, caption = "Echo Class by Radar ID")
-# # Create the summarized and pivoted table
-# echo_table <- echo %>%
-#   select(radarID, class) %>%
-#   count(class, radarID) %>%
-#   pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
-# 
-# # Display as HTML table
-# kable(echo_table, caption = "Echo Class by Radar ID")
+t_captation = paste0(t_date, " ", t_dayOrNight, "time - Echo Class by Radar ID")
+kable(echo_table, caption = t_captation)
+```
+
+Counts per class for the NIGHT with maximal number of echoes
+
+```{r}
+# Find the N (n = 1) dates (dateSunset x dayOrNight) with maximum counts
+t_dayOrNight = 'day'
+max_dates <- echo %>%
+  filter(dayOrNight == t_dayOrNight) %>% 
+  select(dateSunset, dayOrNight) %>%
+  count(dateSunset, dayOrNight) %>%
+  arrange(desc(n)) %>%
+  slice_head(n = 1)
+t_date <- as.Date(max_dates$dateSunset)
+
+# Filter echo data to only include the two dates with maximum counts
+echo_filtered <- echo %>%
+  semi_join(max_dates, by = c("dateSunset", "dayOrNight"))
+
+# Create the summarized and pivoted table per class and radarID using filtered data
+echo_table <- echo_filtered %>%
+  select(radarID, class) %>%
+  count(class, radarID) %>%
+  pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
+
+# Display class table as HTML table
+t_captation = paste0(t_date, " ", t_dayOrNight, "time - Echo Class by Radar ID")
+kable(echo_table, caption = t_captation)
 ```
 
 ```{r process issue dbConnect}
