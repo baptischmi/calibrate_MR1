@@ -10,12 +10,13 @@ execute:
 ```{r packages}
 #| echo: false
 #| message: false
-library(tidyverse)
-library(knitr)
-library(dbplyr)
-library(yaml)
-library(dplyr)
-library(birdscanR)
+suppressMessages(library(tidyverse))
+suppressMessages(library(knitr))
+# suppressMessages(library(kableExtra))
+suppressMessages(library(dbplyr))
+suppressMessages(library(yaml))
+suppressMessages(library(dplyr))
+suppressMessages(library(birdscanR))
 ```
 
 ```{r}
@@ -180,7 +181,7 @@ kable(date_daynight_table, caption = "Counts per Radar ID by Date and Day/Night"
 
 ```
 
-Counts per class for the DAY with maximal number of echoes
+#### Counts per class for the DAY with maximal number of echoes
 
 ```{r}
 # Find the N (n = 1) dates (dateSunset x dayOrNight) with maximum counts
@@ -209,7 +210,7 @@ t_captation = paste0(t_date, " ", t_dayOrNight, "time - Echo Class by Radar ID")
 kable(echo_table, caption = t_captation)
 ```
 
-Counts per class for the NIGHT with maximal number of echoes
+#### Counts per class for the NIGHT with maximal number of echoes
 
 ```{r}
 # Find the N (n = 1) dates (dateSunset x dayOrNight) with maximum counts
@@ -329,7 +330,7 @@ if(file.exists(file.path())){
 
 ```{r scatter plot}
 #| warning: false
-#| 
+#| echo: false
 
 # Assuming your data is stored in a variable called radar_data
 # Filter the data based on the given criteria
@@ -435,4 +436,157 @@ plot_radar_year <- function(data, radarID_val, year_val) {
 
 
 
+```
+
+```{r}
+#| warning: false
+#| echo: false
+
+# Function to extract quantiles for a given height range
+extract_height_quantiles <- function(data, height = 500, spread = 25, 
+                                   quantiles = c(1, 0.99, 0.95, 0.9, 0.75)) {
+  
+  # Define height range
+  height_min <- height - spread
+  height_max <- height + spread
+  
+  # Filter data for the specified height range
+  height_filtered <- data %>%
+    filter(feature1.altitude_AGL >= height_min & 
+           feature1.altitude_AGL <= height_max)
+  
+  # Check if we have data in this height range
+  if(nrow(height_filtered) == 0) {
+    warning(paste("No data found in height range", height_min, "-", height_max, "m"))
+    return(NULL)
+  }
+  
+  # Calculate quantiles for each radar and year combination
+  quantile_results <- height_filtered %>%
+    group_by(radarID, year) %>%
+    summarise(
+      n_observations = n(),
+      height_range = paste0(height_min, "-", height_max, "m"),
+      q100 = quantile(feature14.maxLevel, probs = 1, na.rm = TRUE),
+      q99 = quantile(feature14.maxLevel, probs = 0.99, na.rm = TRUE),
+      q95 = quantile(feature14.maxLevel, probs = 0.95, na.rm = TRUE),
+      q90 = quantile(feature14.maxLevel, probs = 0.9, na.rm = TRUE),
+      q75 = quantile(feature14.maxLevel, probs = 0.75, na.rm = TRUE),
+      .groups = 'drop'
+    ) %>%
+    # Round to 2 decimal places for cleaner display
+    mutate(across(starts_with("q"), ~ round(.x, 2)))
+  
+  return(quantile_results)
+}
+
+# Function to create a nicely formatted table
+# create_quantile_table <- function(quantile_data, title_suffix = "") {
+#   
+#   if(is.null(quantile_data)) {
+#     return(NULL)
+#   }
+#   
+#   # Create a formatted table using kable
+#   library(knitr)
+#   library(kableExtra)
+#   
+#   formatted_table <- quantile_data %>%
+#     kable(
+#       caption = paste0("Quantiles of Maximum Reflectivity Level (dBZ) by Height Range", title_suffix),
+#       col.names = c("Radar ID", "Year", "N Obs", "Height Range", 
+#                    "Q100 (Max)", "Q99", "Q95", "Q90", "Q75"),
+#       align = c("l", "c", "c", "c", "c", "c", "c", "c", "c")
+#     ) %>%
+#     kable_styling(
+#       bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+#       full_width = FALSE,
+#       position = "center"
+#     ) %>%
+#     add_header_above(c(" " = 4, "Quantiles (dBZ)" = 5)) %>%
+#     column_spec(1:2, bold = TRUE) %>%
+#     column_spec(3, color = "blue") %>%
+#     column_spec(5:9, background = "lightblue", alpha = 0.3)
+#   
+#   return(formatted_table)
+# }
+# Alternative simpler version without kable formatting (if kableExtra not available)
+simple_quantile_table  <- function(data, height = 500, spread = 25) {
+
+  results <- extract_height_quantiles(data, height = height, spread = spread)
+
+  if(is.null(results)) {
+    return(NULL)
+  }
+
+  cat("\nQuantiles of Maximum Reflectivity Level (dBZ)\n")
+  cat("Height Range:", height - spread, "-", height + spread, "m\n")
+  cat("=" , rep("=", 60), "\n", sep = "")
+
+  print(results, n = Inf)
+
+  #return(results)
+}
+
+# Example usage function
+analyze_height_range <- function(data, height = 500, spread = 25) {
+  
+  cat("Analyzing height range:", height - spread, "-", height + spread, "m\n")
+  cat("=================================================\n\n")
+  
+  # Extract quantiles
+  results <- extract_height_quantiles(data, height = height, spread = spread)
+  
+  if(is.null(results)) {
+    cat("No data available for analysis.\n")
+    return(NULL)
+  }
+  
+  # Print summary statistics
+  cat("Summary:\n")
+  cat("- Total radar-year combinations:", nrow(results), "\n")
+  cat("- Total observations:", sum(results$n_observations), "\n")
+  cat("- Radars included:", paste(unique(results$radarID), collapse = ", "), "\n")
+  cat("- Years included:", paste(sort(unique(results$year)), collapse = ", "), "\n\n")
+  
+  # Create and display table
+  # table_output <- create_quantile_table(results, 
+  #                                      paste0(" (", height - spread, "-", height + spread, "m)"))
+  table_output <- simple_quantile_table (data, height = height, spread = spread)
+  
+  # Also return raw results for further analysis
+  list(
+    table = table_output,
+    data = results,
+    summary = list(
+      height_range = paste0(height - spread, "-", height + spread, "m"),
+      n_combinations = nrow(results),
+      total_obs = sum(results$n_observations),
+      radars = unique(results$radarID),
+      years = sort(unique(results$year))
+    )
+  )
+}
+
+# Quick usage examples:
+# 
+# # Analyze 500m ± 25m height range
+# results_500m <- analyze_height_range(filtered_data, height = 500, spread = 25)
+# print(results_500m$table)
+# 
+# # Analyze 1000m ± 50m height range  
+# results_1000m <- analyze_height_range(filtered_data, height = 1000, spread = 50)
+# print(results_1000m$table)
+# 
+# # Access raw data for further analysis
+# raw_data <- results_500m$data
+# View(raw_data)
+```
+
+#### Max level at 500 m agl
+
+```{r}
+# # Analyze 500m ± 25m height range
+results_500m <- analyze_height_range(filtered_data, height = 500, spread = 25)
+print(results_500m$table)
 ```
