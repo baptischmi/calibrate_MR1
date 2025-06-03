@@ -146,7 +146,7 @@ if(file.exists(rds_path)){
            year = year(dateSunset)
            ) %>% 
     filter(time_stamp_targetTZ >= i_db$startTime & time_stamp_targetTZ <= i_db$stopTime) %>% 
-    select(echoID, protocolID, stc_level, time_stamp_originTZ, time_stamp_targetTZ, time_string, dateSunset, year, 
+    select(echoID, protocolID, stc_level, time_stamp_originTZ, time_stamp_targetTZ, time_string, dateSunset, year, dayOrNight, dayOrCrepOrNight, 
            fs, feature1.altitude_AGL, feature2.azimuth, feature3.speed, feature14.maxLevel, feature17.rcs, feature19.durationOfEcho, feature37.speed, 
            WFF_credibility, WFF_predicted, class, class_probability, mtr_factor_rf, #mtr_factor_sphereDiaCm, 
            siteID, pulseType, rotate, stc, threshold, radarID, transmitPower)
@@ -171,8 +171,8 @@ if(file.exists(rds_path)){
 ```{r get counts of echoes}
 # Create table with counts per radarID for each date and day/night
 date_daynight_table <- echo %>%
-  select(radarID, date_sunset, dayNight) %>%
-  count(date_sunset, dayNight, radarID) %>%
+  select(radarID, dateSunset, dayOrNight) %>%
+  count(dateSunset, dayOrNight, radarID) %>%
   pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
 
 # Display date/day-night table
@@ -182,16 +182,16 @@ kable(date_daynight_table, caption = "Counts per Radar ID by Date and Day/Night"
 ```
 
 ```{r}
-# Find the two dates (date_sunset x dayNight) with maximum counts
+# Find the two dates (dateSunset x dayOrNight) with maximum counts
 max_dates <- echo %>%
-  select(date_sunset, dayNight) %>%
-  count(date_sunset, dayNight) %>%
+  select(dateSunset, dayOrNight) %>%
+  count(dateSunset, dayOrNight) %>%
   arrange(desc(n)) %>%
   slice_head(n = 2)
 
 # Filter echo data to only include the two dates with maximum counts
 echo_filtered <- echo %>%
-  semi_join(max_dates, by = c("date_sunset", "dayNight"))
+  semi_join(max_dates, by = c("dateSunset", "dayOrNight"))
 
 # Create the summarized and pivoted table per class and radarID using filtered data
 echo_table <- echo_filtered %>%
