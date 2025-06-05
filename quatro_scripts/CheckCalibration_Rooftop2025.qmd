@@ -10,13 +10,13 @@ execute:
 ```{r packages}
 #| echo: false
 #| message: false
-suppressMessages(library(tidyverse))
-suppressMessages(library(knitr))
-# suppressMessages(library(kableExtra))
-suppressMessages(library(dbplyr))
-suppressMessages(library(yaml))
-suppressMessages(library(dplyr))
-suppressMessages(library(birdscanR))
+library(tidyverse, quietly = TRUE)
+library(knitr, quietly = TRUE)
+# library(kableExtra))
+library(dbplyr, quietly = TRUE)
+library(yaml, quietly = TRUE)
+library(dplyr, quietly = TRUE)
+library(birdscanR, quietly = TRUE)
 ```
 
 ```{r}
@@ -328,28 +328,24 @@ if(file.exists(file.path())){
 
 ## Visualize
 
-```{r scatter plot}
-#| warning: false
-#| echo: false
-
-# Assuming your data is stored in a variable called radar_data
+```{r}
 # Filter the data based on the given criteria
 wbf_lower <- 5
 wbf_upper <- 250
 wbf_min_cred <- 0 # 0.6
 class_sel <- 'all_echoes' # 'passerine'# 'all_birds'
-filtered_data <- echo
-# filtered_data <- echo %>%
-#   filter(
-#     if(class_sel == 'passerine')
-#     class == class_sel
-#     ) %>% 
-#     filter(
-#       WFF_predicted >= wbf_lower & WFF_predicted <= wbf_upper,
-#       WFF_credibility > wbf_min_cred 
-#   ) %>%
-#   # Create year column from dateSunset
-#   mutate(year = year(dateSunset))
+filtered_data <- echo %>%
+    filter(
+      # class %in% class_sel,
+      WFF_predicted >= wbf_lower & WFF_predicted <= wbf_upper,
+      WFF_credibility > wbf_min_cred
+    )
+
+```
+
+```{r scatter plot}
+#| warning: false
+#| echo: false
 
 # Create a data frame with unique transmitPower values for each radarID and year combination
 transmitPower_labels <- filtered_data %>%
