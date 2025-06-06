@@ -1,5 +1,5 @@
 ---
-title: "Check MR1 calibration"
+title: "Check MR1 calibration - BS223"
 author: "Baptiste schmid"
 format: html
 editor: visual
@@ -203,14 +203,14 @@ if(file.exists(rds_path)){
 wbf_lower <- 5
 wbf_upper <- 250
 wbf_min_cred <- 0 # 0.6
-pulseType <- "S"
+pulseType_sel <- "S"
 class_sel <- 'all_echoes' # 'passerine'# 'all_birds'
 filtered_data <- echo %>%
     filter(
       # class %in% class_sel,
       WFF_predicted >= wbf_lower & WFF_predicted <= wbf_upper,
       WFF_credibility > wbf_min_cred,
-      pulseType == pulseType
+      pulseType == pulseType_sel
     )
 ```
 
@@ -455,3 +455,5 @@ analyze_height_range <- function(data, height = 500, spread = 25) {
 results_500m <- analyze_height_range(filtered_data, height = 500, spread = 25)
 print(results_500m$table)
 ```
+
+#### 

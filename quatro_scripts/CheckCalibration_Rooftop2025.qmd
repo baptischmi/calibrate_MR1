@@ -1,5 +1,5 @@
 ---
-title: "Check MR1 calibration"
+title: "Check MR1 calibration 225"
 author: "Baptiste schmid"
 format: html
 editor: visual
@@ -214,7 +214,7 @@ kable(echo_table, caption = t_captation)
 
 ```{r}
 # Find the N (n = 1) dates (dateSunset x dayOrNight) with maximum counts
-t_dayOrNight = 'day'
+t_dayOrNight = 'night'
 max_dates <- echo %>%
   filter(dayOrNight == t_dayOrNight) %>% 
   select(dateSunset, dayOrNight) %>%
@@ -333,12 +333,14 @@ if(file.exists(file.path())){
 wbf_lower <- 5
 wbf_upper <- 250
 wbf_min_cred <- 0 # 0.6
+pulseType_sel <- "S"
 class_sel <- 'all_echoes' # 'passerine'# 'all_birds'
 filtered_data <- echo %>%
     filter(
       # class %in% class_sel,
       WFF_predicted >= wbf_lower & WFF_predicted <= wbf_upper,
-      WFF_credibility > wbf_min_cred
+      WFF_credibility > wbf_min_cred,
+      pulseType == pulseType_sel
     )
 
 ```
