@@ -1,0 +1,255 @@
+---
+title: "Monthly Scatterplots by Site"
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+    toc: true
+    theme: cosmo
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+## Monthly Height vs Max Level Analysis
+
+This document presents monthly scatterplots of height vs maximum reflectivity level, organized by site ID using interactive tabs.
+
+```{r setup}
+#| include: false
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(htmlwidgets)
+library(DT)
+
+mainOutputDir <- "C:/Users/bs/OneDrive - Vogelwarte/31403 Radartechnik/SBRS divers/Calibration_MR1/BS223"
+
+# Ensure your filtered_data is loaded here
+file_name <- file.path(mainOutputDir, "Calibration_EchoDataHR_Vrana_2024_HR_Vrana_2023_DE_BadLauchstaedt_2022_DE_Bernburg_2021_CH_Bern_2020_CH_Rothenburg_2020_CH_Bern_2020_CH_Zuerich_2020.rds")
+echo <- readRDS(file_name) # or however you load your data
+```
+
+```{r data-prep}
+#| echo: true
+#| code-fold: true
+
+# Add month column to your filtered_data if not already present
+# Using dateSunset as the date column based on your data
+filtered_data <- echo %>%
+  mutate(month = format(as.Date(dateSunset), "%Y-%m"))
+
+# Get unique siteIDs for creating tabs
+unique_sites <- unique(filtered_data$siteID)
+
+# Display summary of data
+cat("Number of unique sites:", length(unique_sites), "\n")
+cat("Sites:", paste(unique_sites, collapse = ", "), "\n")
+cat("Date range:", range(filtered_data$month, na.rm = TRUE), "\n")
+```
+
+## Interactive Plotly Visualization
+
+```{r plotly-function}
+#| echo: true
+#| code-fold: true
+
+# Function to create plot for a specific siteID
+create_site_plot <- function(site_data, site_id) {
+  
+  # Create transmitPower labels for this site
+  transmitPower_labels <- site_data %>%
+    group_by(month) %>%
+    summarize(
+      transmitPower = first(transmitPower),
+      x_pos = min(feature14.maxLevel, na.rm = TRUE),
+      y_pos = max(feature1.altitude_AGL, na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  # Create the plot
+  p <- ggplot(site_data, aes(x = feature14.maxLevel, y = feature1.altitude_AGL)) +
+    # Add points
+    geom_point(alpha = 0.3, color = "blue") +
+    # Add quantile isolines (at 25%, 50%, 75%, and 95%)
+    geom_density_2d(aes(color = after_stat(level)), bins = 4) +
+    scale_color_viridis_c(option = "plasma", name = "Density") +
+    # Add transmitPower label in the upper left corner of each panel
+    geom_text(
+      data = transmitPower_labels,
+      aes(x = x_pos, y = y_pos, label = paste0("Psent: ", transmitPower, " kW")),
+      hjust = 0, vjust = 1,
+      color = "black", size = 3, fontface = "bold",
+      nudge_x = 0.5,
+      nudge_y = -5
+    ) +
+    # Facet by month instead of siteID
+    facet_wrap(~ month, scales = "free") +
+    # Add labels and title
+    labs(
+      title = paste0("Site: ", site_id, " - ", 
+                    ifelse(exists('class_sel') && class_sel == 'passerine', "Passerine class", "All classes")),
+      subtitle = "Height vs Max Level with Density Isolines - Monthly View",
+      x = "Maximum Reflectivity Level (dBZ)",
+      y = "Height (m)",
+      caption = "Note: Isolines represent density quantiles (25%, 50%, 75%, 95%)"
+    ) +
+    # Theme adjustments
+    theme_minimal() +
+    theme(
+      panel.grid.minor = element_blank(),
+      strip.background = element_rect(fill = "lightgray"),
+      strip.text = element_text(face = "bold"),
+      legend.position = "bottom",
+      plot.title = element_text(size = 12),
+      plot.subtitle = element_text(size = 10)
+    )
+  
+  return(p)
+}
+```
+
+```{r create-interactive-plot}
+#| echo: true
+#| code-fold: true
+#| fig-height: 8
+#| fig-width: 12
+
+# Create plots for each siteID and convert to plotly
+plotly_list <- list()
+for(i in seq_along(unique_sites)) {
+  site <- unique_sites[i]
+  site_data <- filtered_data %>% filter(siteID == site)
+  
+  # Create the plot for this site
+  p <- create_site_plot(site_data, site)
+  
+  # Convert to plotly with better tooltip
+  plotly_list[[i]] <- ggplotly(p, tooltip = c("x", "y")) %>%
+    plotly::layout(showlegend = if(i == 1) TRUE else FALSE)  # Only show legend for first plot
+}
+
+# Create buttons for site selection
+buttons <- list()
+for(i in seq_along(unique_sites)) {
+  visible_vector <- rep(FALSE, length(unique_sites))
+  visible_vector[i] <- TRUE
+  
+  buttons[[i]] <- list(
+    method = "restyle",
+    args = list("visible", visible_vector),
+    label = paste("Site", unique_sites[i])
+  )
+}
+
+# Create the final interactive plot
+final_plot <- subplot(plotly_list, nrows = 1, shareX = FALSE, shareY = FALSE) %>%
+  plotly::layout(
+    title = list(
+      text = "Monthly Scatterplots by Site - Click buttons to switch sites",
+      font = list(size = 16)
+    ),
+    updatemenus = list(
+      list(
+        type = "buttons",
+        direction = "right",
+        x = 0.1, y = 1.02,
+        xanchor = 'left',
+        yanchor = 'bottom',
+        buttons = buttons,
+        bgcolor = "lightblue",
+        bordercolor = "darkblue",
+        borderwidth = 1
+      )
+    ),
+    annotations = list(
+      list(
+        text = "Select Site:",
+        x = 0.02, y = 1.05,
+        xref = "paper", yref = "paper",
+        showarrow = FALSE,
+        font = list(size = 14, color = "black")
+      )
+    ),
+    margin = list(t = 80)  # Add top margin for buttons
+  )
+
+# Display the interactive plot
+final_plot
+```
+
+## Alternative: Tabset Panel Approach
+
+::: panel-tabset
+```{r}
+#| echo: false
+#| results: asis
+
+# Generate tabs dynamically
+for(site in unique_sites) {
+  cat("\n\n### Site", site, "\n\n")
+  
+  # Filter data for this site
+  site_data <- filtered_data %>% filter(siteID == site)
+  
+  # Create and display plot
+  p <- create_site_plot(site_data, site)
+  
+  # Convert to plotly for interactivity
+  plotly_p <- ggplotly(p, tooltip = c("x", "y"))
+  
+  # Print the plot
+  print(htmltools::tagList(plotly_p))
+  
+  cat("\n\n")
+}
+```
+:::
+
+## Data Summary
+
+```{r data-summary}
+#| echo: false
+
+# Create summary table
+summary_table <- filtered_data %>%
+  group_by(siteID, month) %>%
+  summarise(
+    n_observations = n(),
+    mean_height = round(mean(feature1.altitude_AGL, na.rm = TRUE), 1),
+    mean_max_level = round(mean(feature14.maxLevel, na.rm = TRUE), 1),
+    transmit_power = first(transmitPower),
+    .groups = "drop"
+  ) %>%
+  arrange(siteID, month)
+
+# Display as interactive table
+DT::datatable(
+  summary_table,
+  caption = "Summary statistics by site and month",
+  options = list(
+    pageLength = 10,
+    scrollX = TRUE,
+    dom = 'Bfrtip',
+    buttons = c('csv', 'excel')
+  ),
+  extensions = 'Buttons'
+) %>%
+  DT::formatStyle(
+    'n_observations',
+    backgroundColor = DT::styleInterval(c(50, 100), c('lightcoral', 'lightyellow', 'lightgreen'))
+  )
+```
+
+## Notes
+
+-   **Interactive Plot**: Use the buttons above the main plot to switch between different sites
+-   **Tabset Panels**: Alternative view with traditional tabs for each site
+-   **Data Summary**: Interactive table showing summary statistics for each site-month combination
+-   **Density Isolines**: Represent quantiles at 25%, 50%, 75%, and 95%
+-   **Color coding in summary table**:
+    -   Red: \< 50 observations
+    -   Yellow: 50-100 observations\
+    -   Green: \> 100 observations

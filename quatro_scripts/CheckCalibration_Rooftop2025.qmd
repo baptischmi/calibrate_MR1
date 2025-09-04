@@ -25,19 +25,13 @@ mainOutputDir <- "C:/Users/bs/OneDrive - Vogelwarte/31403 Radartechnik/SBRS dive
 
 ## Calibrate MR1
 
-Multiple MR1 radar can run in close proximity (few meters aprat) to check and correct their calibration.
+```{r}
+radarID_siteName <- c("radarID", "siteName")[1]
+```
 
-How to:
+Multiple MR1 radar can run in close proximity (few meters apart) to check and correct their calibration. Analyses are then conducted per `r radarID_siteName` .
 
-get data from the echo table
-
-Create scatterplot of max_level (feature14) by height (feaure1)
-
--   filter by short pulse
-
--   filter by class
-
--   filter by wingbeat frequency
+If the aim is to compare the performance of a radar across time, then analyse are conducted per `r radarID_siteName` .
 
 ## Load Database Configuration
 
@@ -155,8 +149,11 @@ if(file.exists(rds_path)){
   
     if(i == 1){
       echo = i_echo
+      ls_dbData <- list()
+      ls_dbData[i_db$dbname] <- i_dbData
     } else {
       echo = rbind(echo, i_echo)
+      ls_dbData[i_db$dbname] <- i_dbData
     }
     
     rm(list = ls(pattern = "^i_"))
@@ -164,8 +161,33 @@ if(file.exists(rds_path)){
   }
   # save echo dataset to mainoutputdir
   saveRDS(echo, rds_path)
+  saveRDS(ld_DbData, )
 }
+```
 
+#### Filter Data
+
+Fitler data for short-pulse only, and using the same threshold values. Selecting the highest threshold across DBs ensure that, given a proper radar calibration, the smallest echo disapear uniformaely across all. This is true above the STC. make sure STC is uniformally applied, or check data above the hightest STC.
+
+Which threshold is used across the `r radarID_siteName` ?
+
+```{r}
+if(radarID_siteName == 'radarID'){
+  table(echo$stc, echo$threshol, echo$pulseType, echo$radarID) 
+} else {
+  table(echo$stc, echo$threshol, echo$pulseType, echo$siteName) 
+}
+```
+
+```{r}
+# Filter the data based on the given criteria
+pulseType_sel <- "S"
+threshold_highest <- max(echo$threshold, na.rm = TRUE) # [dBm] selecting the highest threshold ensure that, if the radar are calibrated, the smallest echo disapear uniformaely across all. This is true above teh STC. make sure STC is uniformally applied, or check data above the hightest STC.
+filtered_data <- echo %>%
+    filter(
+      pulseType == pulseType_sel,
+      threshold <= threshold_highest
+    )
 
 ```
 
@@ -330,17 +352,12 @@ if(file.exists(file.path())){
 
 ```{r}
 # Filter the data based on the given criteria
-wbf_lower <- 5
-wbf_upper <- 250
-wbf_min_cred <- 0 # 0.6
 pulseType_sel <- "S"
-class_sel <- 'all_echoes' # 'passerine'# 'all_birds'
+threshold_highest <- max(echo$threshold, na.rm = TRUE) # [dBm] selecting the highest threshold ensure that, if the radar are calibrated, the smallest echo disapear uniformaely across all. This is true above teh STC. make sure STC is uniformally applied, or check data above the hightest STC.
 filtered_data <- echo %>%
     filter(
-      # class %in% class_sel,
-      WFF_predicted >= wbf_lower & WFF_predicted <= wbf_upper,
-      WFF_credibility > wbf_min_cred,
-      pulseType == pulseType_sel
+      pulseType == pulseType_sel,
+      threshold <= threshold_highest
     )
 
 ```
@@ -380,7 +397,7 @@ passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1
   facet_grid(year ~ radarID) +
   # Add labels and title
   labs(
-    title = paste0( ifelse(class_sel == 'passerine', "Passerine class", "All classes"), " (WBF [", wbf_lower, ",", wbf_upper, "], Cred > 0.6)" ),
+    title = paste0( "All classes, pulseType ", pulseType_sel, ", threshold ", threshold_highest),
     subtitle = "Height vs Max Level with Density Isolines",
     x = "Maximum Reflectivity Level (dBZ)",
     y = "Height (m)",
@@ -422,7 +439,7 @@ plot_radar_year <- function(data, radarID_val, year_val) {
     scale_color_viridis_c(option = "plasma", name = "Density") +
     labs(
       title = paste("Passerine Type Detections for Radar", radar_id_val, "in", year_val),
-      subtitle = "Height vs Max Level with Density Isolines (WBF Cred > 0.6)",
+      subtitle = "Height vs Max Level with Density Isolines",
       x = "Maximum Reflectivity Level (dBZ)",
       y = "Height (m)"
     ) +
