@@ -1,10 +1,10 @@
 ---
-title: "Check MR1 calibration 2025"
+title: "Check MR1 calibration spring 2023"
 author: "Baptiste schmid"
 format: html
 editor: visual
 params:
-  outdir: "C:/Users/bs/OneDrive - Vogelwarte/31403 Radartechnik/SBRS divers/Calibration_MR1/Rooftop_2025"
+  outdir: "C:/Users/bs/OneDrive - Vogelwarte/31403 Radartechnik/SBRS divers/Calibration_MR1/Croatia_2023"
 execute:
   echo: false
 ---
@@ -19,6 +19,12 @@ library(dbplyr, quiet = TRUE)
 library(yaml, quiet = TRUE)
 library(dplyr, quiet = TRUE)
 library(birdscanR, quiet = TRUE)
+
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
 ```
 
 ```{r}
@@ -44,28 +50,28 @@ If the aim is to compare the performance of a radar across time, then analyse ar
 # Load the YAML configuration
 config_yaml <- "
 databases:
-  - dbname: 'CH_HiRAD3bs223_2025'
-    startTime: '2025-05-13 14:00'
-    stopTime: '2025-05-20 00:00'
-    siteLocation: c(47.494427, 8.716432)
+  - dbname: 'HR_Palud_2023'
+    startTime: '2023-03-01 14:00'
+    stopTime: '2023-05-31 00:00'
+    siteLocation: c(45.03970278, 13.697478)
     radarTimeZone: 'Etc/GMT0'
   
-  - dbname: 'CH_HiRAD1bs225_2025'
-    startTime: '2025-05-13 14:00'
-    stopTime: '2025-05-20 00:00'
-    siteLocation: c(47.494427, 8.716432)
+  - dbname: 'HR_Rovinj_2023'
+    startTime: '2023-03-01 14:00'
+    stopTime: '2023-05-31 00:00'
+    siteLocation: c(45.0826367, 13.6370857)
     radarTimeZone: 'Etc/GMT0'
   
-  - dbname: 'CH_HiRAD2bs226_2025'
-    startTime: '2025-05-13 14:00'
-    stopTime: '2025-05-20 00:00'
-    siteLocation: c(47.494427, 8.716432)
+  - dbname: 'HR_Vrana_2023'
+    startTime: '2023-03-01 14:00'
+    stopTime: '2023-05-31 00:00'
+    siteLocation: c(44.1204628, 15.5097716)
     radarTimeZone: 'Etc/GMT0'
   
-  - dbname: 'CH_HiRAD4bs227_2025'
-    startTime: '2025-05-13 14:00'
-    stopTime: '2025-05-20 00:00'
-    siteLocation: c(47.494427, 8.716432)
+  - dbname: 'HR_Zadar_2023'
+    startTime: '2023-03-01 14:00'
+    stopTime: '2023-05-31 00:00'
+    siteLocation: c(47.494427, 15.2404117)
     radarTimeZone: 'Etc/GMT0'
 "
 
@@ -269,6 +275,42 @@ t_captation = paste0(t_date, " ", t_dayOrNight, "time - Echo Class by Radar ID")
 kable(echo_table, caption = t_captation)
 ```
 
+```{r 2023-04-19}
+t_date <- as.Date("2023-04-19")
+
+# Filter echo data to only include the two dates with maximum counts
+echo_filtered <- filtered_data %>%
+  semi_join(max_dates, by = c("dateSunset", "dayOrNight"))
+
+# Create the summarized and pivoted table per class and radarID using filtered data
+echo_table <- echo_filtered %>%
+  select(radarID, class) %>%
+  count(class, radarID) %>%
+  pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
+
+# Display class table as HTML table
+t_captation = paste0(t_date, " ", t_dayOrNight, "time - Echo Class by Radar ID")
+kable(echo_table, caption = t_captation)
+```
+
+```{r 2023-04-21}
+t_date <- as.Date("2023-04-21")
+
+# Filter echo data to only include the two dates with maximum counts
+echo_filtered <- filtered_data %>%
+  semi_join(max_dates, by = c("dateSunset", "dayOrNight"))
+
+# Create the summarized and pivoted table per class and radarID using filtered data
+echo_table <- echo_filtered %>%
+  select(radarID, class) %>%
+  count(class, radarID) %>%
+  pivot_wider(names_from = radarID, values_from = n, values_fill = 0)
+
+# Display class table as HTML table
+t_captation = paste0(t_date, " ", t_dayOrNight, "time - Echo Class by Radar ID")
+kable(echo_table, caption = t_captation)
+```
+
 ```{r fun RCS distribution}
 library(ggplot2)
 library(dplyr)
@@ -346,19 +388,62 @@ plot_rcs_altitude_distributions <- function(
   # Combine plots vertically
   rcs_plot / alt_plot
 }
-  
 ```
 
 ```{r rcs for passerine}
 plot_rcs_altitude_distributions(filtered_data, style = "boxplot")
 plot_rcs_altitude_distributions(filtered_data, style = "density")
-
 ```
 
 ```{r rcs for all birds}
 plot_rcs_altitude_distributions(filtered_data, style = "boxplot", classes = c("passerine_type", "wader_type", "unid_bird"), max_RCS = 0.02)
 plot_rcs_altitude_distributions(filtered_data, style = "density", classes = c("passerine_type", "wader_type", "unid_bird"), max_RCS = 0.02)
 
+```
+
+```{r}
+# Provided parameters
+TS <- -93 # dBm as for Pr_min 
+Hmax <- 300 # m as for STCdist 
+Psend <- 22 # kW as for Pt 
+Again <- 20 # dBi as for G0 
+
+# Provided function
+funMinRCS <- function(TS=numeric(), Hmax=numeric(), Psend=numeric(), Again=numeric()){
+  min_rcs <- (10^(TS/10) * 10^-3 * Hmax^4 * (4*pi)^3)/
+    ((Psend*10^3) * (10^(Again/10))^2 * (3*10^8/(9.4*10^9))^2)   
+  out <- min_rcs 
+  return(out)
+}
+
+min_rcs <- funMinRCS(TS, Hmax, Psend, Again)
+
+# Create a function for the line: y = f(x), where x is altitude (AGL)
+# Reverse-engineer what the line should be for the plot (for demonstration, I’ll plot a horizontal line at min_rcs)
+# If you need a more complex line, provide the explicit formula.
+
+#library(ggplot2)
+library(gridExtra)
+
+# First plot: stc_level vs. feature1.altitude_AGL
+p1 <- ggplot(df, aes(x = feature1.altitude_AGL, y = stc_level)) +
+  geom_point() +
+  geom_hline(yintercept = min_rcs, color = "blue", linetype = "dashed") +
+  labs(title = "stc_level vs. feature1.altitude_AGL") +
+  theme_bw()
+
+# Second plot: feature14.maxLevel vs. altitude (with red for stc_level > maxLevel)
+df$color_flag <- ifelse(df$stc_level > df$feature14.maxLevel, "red", "black")
+
+p2 <- ggplot(df, aes(x = feature1.altitude_AGL, y = feature14.maxLevel)) +
+  geom_point(aes(color = color_flag)) +
+  scale_color_identity() +
+  geom_hline(yintercept = min_rcs, color = "blue", linetype = "dashed") +
+  labs(title = "feature14.maxLevel vs. altitude", y = "feature14.maxLevel") +
+  theme_bw()
+
+# Arrange the two plots
+grid.arrange(p1, p2, ncol = 1)
 ```
 
 ```{r}
@@ -375,27 +460,14 @@ summary_table <- filtered_data %>%
   )
 ```
 
+We here see the percentage of echoes with a max_level below the stc_level, and the quantiles of the difference between the two values.
+
 ```{r}
+
 knitr::kable(summary_table, digits = 2, caption = "Echoes with stc_level > feature14.maxLevel per radarID")
 ```
 
-```{r scatter plto stc_level vs max_level}
-#| eval: false
-#| echo: false 
-filtered_data %>%
-  select(stc_level, feature14.maxLevel, radarID) %>%
-  ggplot(aes(x = feature14.maxLevel, y = stc_level)) +
-  geom_point() +
-  facet_wrap(~ radarID) +
-  labs(
-    x = "feature14.maxLevel",
-    y = "stc_level",
-    title = "stc_level vs feature14.maxLevel by radarID"
-  ) +
-  theme_minimal()
-```
-
-```{r process issue dbConnect}
+```{r NOT RUN process issue dbConnect}
 #| eval: false
 #| echo: false
 
@@ -504,17 +576,6 @@ transmitPower_labels <- filtered_data %>%
 passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1.altitude_AGL)) +
   # Add points
   geom_point(alpha = 0.3, color = "blue") +
-  
-  # Add quantile isolines (at 25%, 50%, 75%, and 95%)
-  # geom_density_2d(aes(color = after_stat(level)), bins = 4) +
-  # scale_color_viridis_c(option = "plasma", name = "Density") +
-  
-  # Add quantile isolines at specified quantiles (99%, 95%, 90%, 75%, 50%)
-  stat_density_2d(aes(color = after_stat(level)), 
-                   breaks = c(0.01, 0.05, 0.10, 0.25, 0.50),  # Corresponds to 99%, 95%, 90%, 75%, 50% quantiles
-                   contour = TRUE) +
-  scale_color_viridis_c(option = "plasma", name = "Density",
-                        labels = c("99%", "95%", "90%", "75%", "50%")) +
   # Add transmitPower label in the upper left corner of each panel
   geom_text(
     data = transmitPower_labels,
@@ -578,6 +639,7 @@ print(passerine_plot)
 
 # Example usage:
 # plot_radar_year(filtered_data, 3220, 2023)
+
 
 
 ```
@@ -733,4 +795,193 @@ analyze_height_range <- function(data, height = 500, spread = 25) {
 # # Analyze 500m ± 25m height range
 results_500m <- analyze_height_range(filtered_data, height = 500, spread = 25)
 print(results_500m$table)
+```
+
+```{r plot height distribution}
+
+# Assuming your data is loaded as 'filtered_data'
+# If you need to load it, uncomment and modify the following line:
+# filtered_data <- read.csv("your_data_file.csv")
+
+# Data preparation
+radar_data <- filtered_data %>%
+  filter(!is.na(feature1.altitude_AGL) & !is.na(class) & !is.na(radarID)) %>%
+  mutate(
+    radarID = factor(radarID),
+    class = factor(class),
+    dayOrNight = factor(dayOrNight)
+  )
+
+# Get unique radar IDs and classes for consistent plotting
+radar_ids <- sort(unique(radar_data$radarID))
+classes <- sort(unique(radar_data$class))
+
+print(paste("Number of radar IDs:", length(radar_ids)))
+print(paste("Classes:", paste(classes, collapse = ", ")))
+print(paste("Day/Night categories:", paste(unique(radar_data$dayOrNight), collapse = ", ")))
+
+# Function to create frequency plots
+create_frequency_plot <- function(data, day_night_filter = NULL) {
+  
+  plot_data <- data
+  title_suffix <- ""
+  
+  if (!is.null(day_night_filter)) {
+    plot_data <- data %>% filter(dayOrNight == day_night_filter)
+    title_suffix <- paste(" -", str_to_title(day_night_filter))
+  }
+  
+  p <- ggplot(plot_data, aes(x = feature1.altitude_AGL)) +
+    geom_histogram(bins = 50, alpha = 0.7, color = "black", size = 0.3) +
+    facet_grid(class ~ radarID, scales = "free_y") +
+    labs(
+      title = paste("Frequency Distribution of Echo Heights", title_suffix),
+      x = "Altitude AGL (m)",
+      y = "Frequency"
+    ) +
+    theme_minimal() +
+    theme(
+      strip.text = element_text(size = 8),
+      axis.text = element_text(size = 7),
+      plot.title = element_text(size = 12, hjust = 0.5)
+    )
+  
+  return(p)
+}
+
+# Function to create density plots
+create_density_plot <- function(data, day_night_filter = NULL) {
+  
+  plot_data <- data
+  title_suffix <- ""
+  
+  if (!is.null(day_night_filter)) {
+    plot_data <- data %>% filter(dayOrNight == day_night_filter)
+    title_suffix <- paste(" -", str_to_title(day_night_filter))
+  }
+  
+  p <- ggplot(plot_data, aes(x = feature1.altitude_AGL)) +
+    geom_density(alpha = 0.7, fill = "skyblue", color = "darkblue") +
+    facet_grid(class ~ radarID, scales = "free_y") +
+    labs(
+      title = paste("Density Distribution of Echo Heights", title_suffix),
+      x = "Altitude AGL (m)",
+      y = "Density"
+    ) +
+    theme_minimal() +
+    theme(
+      strip.text = element_text(size = 8),
+      axis.text = element_text(size = 7),
+      plot.title = element_text(size = 12, hjust = 0.5)
+    )
+  
+  return(p)
+}
+
+# Function to create relative density plot per radarID (horizontal)
+create_relative_density_plot <- function(data, day_night_filter = NULL) {
+  
+  plot_data <- data
+  title_suffix <- ""
+  
+  if (!is.null(day_night_filter)) {
+    plot_data <- data %>% filter(dayOrNight == day_night_filter)
+    title_suffix <- paste(" -", str_to_title(day_night_filter))
+  }
+  
+  # Calculate relative densities
+  density_data <- plot_data %>%
+    group_by(radarID, class) %>%
+    do({
+      if(nrow(.) > 1) {
+        d <- density(.$feature1.altitude_AGL, na.rm = TRUE)
+        data.frame(
+          altitude = d$x,
+          density = d$y / max(d$y)  # Normalize to relative density
+        )
+      } else {
+        data.frame(altitude = numeric(0), density = numeric(0))
+      }
+    }) %>%
+    ungroup()
+  
+  p <- ggplot(density_data, aes(y = altitude, x = density)) +
+    geom_line(color = "darkred", size = 1) +
+    geom_area(alpha = 0.3, fill = "red") +
+    facet_grid(class ~ radarID, scales = "free") +
+    labs(
+      title = paste("Relative Density of Echo Heights per Radar ID", title_suffix),
+      y = "Altitude AGL (m)",
+      x = "Relative Density"
+    ) +
+    theme_minimal() +
+    theme(
+      strip.text = element_text(size = 8),
+      axis.text = element_text(size = 7),
+      plot.title = element_text(size = 12, hjust = 0.5)
+    )
+  
+  return(p)
+}
+
+# Generate plots for all data
+print("Creating frequency plot for all data...")
+freq_all <- create_frequency_plot(radar_data)
+
+print("Creating density plot for all data...")
+density_all <- create_density_plot(radar_data)
+
+print("Creating relative density plot for all data...")
+rel_density_all <- create_relative_density_plot(radar_data)
+
+# Display plots
+print(freq_all)
+print(density_all)
+print(rel_density_all)
+
+# Generate plots filtered by day/night
+if("day" %in% radar_data$dayOrNight) {
+  print("Creating plots for day data...")
+  freq_day <- create_frequency_plot(radar_data, "day")
+  density_day <- create_density_plot(radar_data, "day")
+  rel_density_day <- create_relative_density_plot(radar_data, "day")
+  
+  print(freq_day)
+  print(density_day)
+  print(rel_density_day)
+}
+
+if("night" %in% radar_data$dayOrNight) {
+  print("Creating plots for night data...")
+  freq_night <- create_frequency_plot(radar_data, "night")
+  density_night <- create_density_plot(radar_data, "night")
+  rel_density_night <- create_relative_density_plot(radar_data, "night")
+  
+  print(freq_night)
+  print(density_night)
+  print(rel_density_night)
+}
+
+# Summary statistics
+print("Summary statistics by radarID and class:")
+summary_stats <- radar_data %>%
+  group_by(radarID, class, dayOrNight) %>%
+  summarise(
+    count = n(),
+    mean_altitude = mean(feature1.altitude_AGL, na.rm = TRUE),
+    median_altitude = median(feature1.altitude_AGL, na.rm = TRUE),
+    sd_altitude = sd(feature1.altitude_AGL, na.rm = TRUE),
+    min_altitude = min(feature1.altitude_AGL, na.rm = TRUE),
+    max_altitude = max(feature1.altitude_AGL, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print(summary_stats)
+
+# Optional: Save plots to files
+# Uncomment the following lines if you want to save the plots
+ggsave(file.path(mainOutputDir, "frequency_all.png"), freq_all, width = 12, height = 8, dpi = 300)
+ggsave(file.path(mainOutputDir, "density_all.png"), density_all, width = 12, height = 8, dpi = 300)
+ggsave(file.path(mainOutputDir, "relative_density_all.png"), rel_density_all, width = 12, height = 8, dpi = 300)
+
 ```

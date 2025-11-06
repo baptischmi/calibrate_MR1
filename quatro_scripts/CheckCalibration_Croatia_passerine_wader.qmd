@@ -1,10 +1,10 @@
 ---
-title: "Check MR1 calibration 2025"
+title: "Check MR1 calibration spring 2023  Passerine & Wader"
 author: "Baptiste schmid"
 format: html
 editor: visual
 params:
-  outdir: "C:/Users/bs/OneDrive - Vogelwarte/31403 Radartechnik/SBRS divers/Calibration_MR1/Rooftop_2025"
+  outdir: "C:/Users/bs/OneDrive - Vogelwarte/31403 Radartechnik/SBRS divers/Calibration_MR1/Croatia_2023_passerine_wader"
 execute:
   echo: false
 ---
@@ -44,28 +44,28 @@ If the aim is to compare the performance of a radar across time, then analyse ar
 # Load the YAML configuration
 config_yaml <- "
 databases:
-  - dbname: 'CH_HiRAD3bs223_2025'
-    startTime: '2025-05-13 14:00'
-    stopTime: '2025-05-20 00:00'
-    siteLocation: c(47.494427, 8.716432)
+  - dbname: 'HR_Palud_2023'
+    startTime: '2023-03-01 14:00'
+    stopTime: '2023-05-31 00:00'
+    siteLocation: c(45.03970278, 13.697478)
     radarTimeZone: 'Etc/GMT0'
   
-  - dbname: 'CH_HiRAD1bs225_2025'
-    startTime: '2025-05-13 14:00'
-    stopTime: '2025-05-20 00:00'
-    siteLocation: c(47.494427, 8.716432)
+  - dbname: 'HR_Rovinj_2023'
+    startTime: '2023-03-01 14:00'
+    stopTime: '2023-05-31 00:00'
+    siteLocation: c(45.0826367, 13.6370857)
     radarTimeZone: 'Etc/GMT0'
   
-  - dbname: 'CH_HiRAD2bs226_2025'
-    startTime: '2025-05-13 14:00'
-    stopTime: '2025-05-20 00:00'
-    siteLocation: c(47.494427, 8.716432)
+  - dbname: 'HR_Vrana_2023'
+    startTime: '2023-03-01 14:00'
+    stopTime: '2023-05-31 00:00'
+    siteLocation: c(44.1204628, 15.5097716)
     radarTimeZone: 'Etc/GMT0'
   
-  - dbname: 'CH_HiRAD4bs227_2025'
-    startTime: '2025-05-13 14:00'
-    stopTime: '2025-05-20 00:00'
-    siteLocation: c(47.494427, 8.716432)
+  - dbname: 'HR_Zadar_2023'
+    startTime: '2023-03-01 14:00'
+    stopTime: '2023-05-31 00:00'
+    siteLocation: c(47.494427, 15.2404117)
     radarTimeZone: 'Etc/GMT0'
 "
 
@@ -187,7 +187,7 @@ if(radarID_siteName == 'radarID'){
 # Filter the data based on the given criteria
 pulseType_sel <- "S"
 threshold_highest <- max(echo$threshold, na.rm = TRUE) # [dBm] selecting the highest threshold ensure that, if the radar are calibrated, the smallest echo disapear uniformaely across all. This is true above teh STC. make sure STC is uniformally applied, or check data above the hightest STC.
-class_sel = 'BioClasses'
+class_sel = c('passerine_type','wader_type')
 filtered_data <- echo %>%
   filter(
     pulseType == pulseType_sel,
@@ -267,132 +267,6 @@ echo_table <- echo_filtered %>%
 # Display class table as HTML table
 t_captation = paste0(t_date, " ", t_dayOrNight, "time - Echo Class by Radar ID")
 kable(echo_table, caption = t_captation)
-```
-
-```{r fun RCS distribution}
-library(ggplot2)
-library(dplyr)
-library(patchwork)
-
-plot_rcs_altitude_distributions <- function(
-  data, 
-  style = c("boxplot", "density", "points"),
-  classes = "passerine_type",  # can be a vector of classes
-  max_RCS = Inf                # new argument for maximum RCS value to include
-) {
-  style <- match.arg(style)
-
-  data <- data %>%
-    filter(class %in% classes,
-           WFF_predicted > 8,
-           WFF_predicted < 12,
-           WFF_credibility > 0.4,
-           dayOrNight == 'night',
-           feature17.rcs <= max_RCS) %>%
-    select(feature1.altitude_AGL, feature17.rcs, radarID, class, dateSunset) %>%
-    mutate(radarID = as.factor(radarID),
-           class = as.factor(class))
-  
-  class_lab <- paste0("class: ", paste(levels(droplevels(data$class)), collapse=", "))
-  rcs_lab <- if(is.finite(max_RCS)) paste0("RCS ≤ ", max_RCS) else "all RCS"
-  title_suffix <- paste0(class_lab, "; ", rcs_lab)
-  
-  # RCS plot (upper panel)
-  if (style == "boxplot") {
-    rcs_plot <- ggplot(data, aes(x = radarID, y = feature17.rcs, fill = radarID)) +
-      geom_boxplot(alpha = 0.5, outlier.alpha = 0.2, width = 0.6) +
-      labs(title = paste("RCS distribution by radarID (", title_suffix, ")", sep=""), x = "Radar ID", y = "RCS") +
-      theme_minimal() +
-      theme(legend.position = "none") +
-      facet_wrap(~class)
-  } else if (style == "density") {
-    rcs_plot <- ggplot(data, aes(x = feature17.rcs, color = radarID, fill = radarID)) +
-      geom_density(alpha = 0.25) +
-      labs(title = paste("RCS distribution by radarID (", title_suffix, ")", sep=""), x = "RCS", y = "Density") +
-      theme_minimal() +
-      facet_wrap(~class)
-  } else if (style == "points") {
-    rcs_plot <- ggplot(data, aes(x = radarID, y = feature17.rcs, color = radarID)) +
-      geom_jitter(alpha = 0.4, width = 0.2, height = 0, size = 1.1) +
-      labs(title = paste("RCS distribution by radarID (", title_suffix, ")", sep=""), x = "Radar ID", y = "RCS") +
-      theme_minimal() +
-      theme(legend.position = "none") +
-      facet_wrap(~class)
-  }
-
-  # Altitude plot (lower panel)
-  if (style == "boxplot") {
-    alt_plot <- ggplot(data, aes(x = radarID, y = feature1.altitude_AGL, fill = radarID)) +
-      geom_boxplot(alpha = 0.5, outlier.alpha = 0.2, width = 0.6) +
-      labs(title = paste("Altitude distribution by radarID (", title_suffix, ")", sep=""), x = "Radar ID", y = "Altitude AGL") +
-      theme_minimal() +
-      theme(legend.position = "none") +
-      facet_wrap(~class)
-  } else if (style == "density") {
-    alt_plot <- ggplot(data, aes(x = feature1.altitude_AGL, color = radarID, fill = radarID)) +
-      geom_density(alpha = 0.25) +
-      labs(title = paste("Altitude distribution by radarID (", title_suffix, ")", sep=""), x = "Altitude AGL", y = "Density") +
-      theme_minimal() +
-      facet_wrap(~class)
-  } else if (style == "points") {
-    alt_plot <- ggplot(data, aes(x = radarID, y = feature1.altitude_AGL, color = radarID)) +
-      geom_jitter(alpha = 0.4, width = 0.2, height = 0, size = 1.1) +
-      labs(title = paste("Altitude distribution by radarID (", title_suffix, ")", sep=""), x = "Radar ID", y = "Altitude AGL") +
-      theme_minimal() +
-      theme(legend.position = "none") +
-      facet_wrap(~class)
-  }
-
-  # Combine plots vertically
-  rcs_plot / alt_plot
-}
-  
-```
-
-```{r rcs for passerine}
-plot_rcs_altitude_distributions(filtered_data, style = "boxplot")
-plot_rcs_altitude_distributions(filtered_data, style = "density")
-
-```
-
-```{r rcs for all birds}
-plot_rcs_altitude_distributions(filtered_data, style = "boxplot", classes = c("passerine_type", "wader_type", "unid_bird"), max_RCS = 0.02)
-plot_rcs_altitude_distributions(filtered_data, style = "density", classes = c("passerine_type", "wader_type", "unid_bird"), max_RCS = 0.02)
-
-```
-
-```{r}
-summary_table <- filtered_data %>%
-  mutate(diff = stc_level - feature14.maxLevel) %>%
-  group_by(radarID) %>%
-  summarise(
-    total_echoes = n(),
-    echoes_stc_gt_feature14 = sum(stc_level > feature14.maxLevel, na.rm = TRUE),
-    percent_stc_gt_feature14 = 100 * echoes_stc_gt_feature14 / total_echoes,
-    q25_diff = quantile(diff[stc_level > feature14.maxLevel], 0.25, na.rm = TRUE),
-    q50_diff = quantile(diff[stc_level > feature14.maxLevel], 0.5, na.rm = TRUE),
-    q75_diff = quantile(diff[stc_level > feature14.maxLevel], 0.75, na.rm = TRUE)
-  )
-```
-
-```{r}
-knitr::kable(summary_table, digits = 2, caption = "Echoes with stc_level > feature14.maxLevel per radarID")
-```
-
-```{r scatter plto stc_level vs max_level}
-#| eval: false
-#| echo: false 
-filtered_data %>%
-  select(stc_level, feature14.maxLevel, radarID) %>%
-  ggplot(aes(x = feature14.maxLevel, y = stc_level)) +
-  geom_point() +
-  facet_wrap(~ radarID) +
-  labs(
-    x = "feature14.maxLevel",
-    y = "stc_level",
-    title = "stc_level vs feature14.maxLevel by radarID"
-  ) +
-  theme_minimal()
 ```
 
 ```{r process issue dbConnect}
@@ -504,12 +378,7 @@ transmitPower_labels <- filtered_data %>%
 passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1.altitude_AGL)) +
   # Add points
   geom_point(alpha = 0.3, color = "blue") +
-  
-  # Add quantile isolines (at 25%, 50%, 75%, and 95%)
-  # geom_density_2d(aes(color = after_stat(level)), bins = 4) +
-  # scale_color_viridis_c(option = "plasma", name = "Density") +
-  
-  # Add quantile isolines at specified quantiles (99%, 95%, 90%, 75%, 50%)
+# Add quantile isolines at specified quantiles (99%, 95%, 90%, 75%, 50%)
   stat_density_2d(aes(color = after_stat(level)), 
                    breaks = c(0.01, 0.05, 0.10, 0.25, 0.50),  # Corresponds to 99%, 95%, 90%, 75%, 50% quantiles
                    contour = TRUE) +
@@ -528,7 +397,7 @@ passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1
   facet_grid(year ~ radarID) +
   # Add labels and title
   labs(
-    title = paste0(paste(class_sel, collapse ="-"), ", pulseType ", pulseType_sel, ", threshold ", threshold_highest),
+    title = paste0(paste(class_sel, collapse = "-"), ", pulseType ", pulseType_sel, ", threshold ", threshold_highest),
     subtitle = "Height vs Max Level with Density Isolines",
     x = "Maximum Reflectivity Level (dBZ)",
     y = "Height (m)",
@@ -545,7 +414,7 @@ passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1
 
 # Save the plot to a file
 # For a basic PNG file
-file_name <- paste0( "Dbz vs height for", paste(class_sel, collapse ="-"), ".png" )
+file_name <- paste0( "Dbz vs height for", paste(class_sel, collapse = "-"), ".png" )
 ggsave(filename = file.path(mainOutputDir, file_name), 
        plot = passerine_plot, width = 12, height = 8, dpi = 300)
 
@@ -578,6 +447,7 @@ print(passerine_plot)
 
 # Example usage:
 # plot_radar_year(filtered_data, 3220, 2023)
+
 
 
 ```
