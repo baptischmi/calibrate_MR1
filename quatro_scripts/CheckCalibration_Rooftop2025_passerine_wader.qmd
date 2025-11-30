@@ -359,13 +359,15 @@ if(file.exists(file.path())){
 
 ## Visualize
 
-```{r scatter plot}
+```{r scatter plot max level vs height per quantiles 0}
 #| warning: false
 #| echo: false
 
 # Create a data frame with unique transmitPower values for each radarID and year combination
 transmitPower_labels <- filtered_data %>%
-  group_by(radarID, year) %>%
+  mutate(radar_label =paste0("BS", substr(radarID, 1,3))) %>% 
+  group_by(radar_label, year) %>%
+#  group_by(radarID, year) %>%
   summarize(
     transmitPower = first(transmitPower),
     # Calculate positions for upper left corner of each panel
@@ -380,19 +382,13 @@ passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1
   # Add points FIRST (so they're drawn on the bottom layer)
   geom_point(alpha = 0.2, color = "lightblue", size = 0.5) +
   # Add quantile isolines AFTER points (so they're drawn on top)
-  # stat_density_2d(aes(color = after_stat(level)), 
-  #                  breaks = c(0.01, 0.05, 0.10),  # , 0.25, 0.50
-  #                  contour = TRUE,
-  #                  linewidth = 1.8) +  # Optional: make lines thicker for better visibility
-  # scale_color_viridis_c(option = "plasma", name = "Density",
-  #                       labels = c("99%", "95%", "90%")) + # , "75%", "50%"
   stat_density_2d(geom = "density_2d", 
                   aes(color = after_stat(level)),
                   contour_var = "ndensity",  # Use normalized density
-                  breaks = c(0.01, 0.05, 0.1, 0.25, 0.5),  # Now these are quantiles , 0.75, 0.90, 0.95, 0.99
-                  linewidth = 0.8) +
-  scale_color_viridis_c(option = "plasma", name = "Density Quantile" #,
-                       #labels = c("99%", "95%", "90%", "75%", "50%")
+                  breaks = c(0.25, 0.5, 0.75, 0.9),  # Now these are quantiles
+                  linewidth = 0.5) +
+  scale_color_viridis_c(option = "plasma", name = "Density Quantile"#,
+                       #labels = c("25%", "50%", "75%", "90%")
                        ) +
   # Add transmitPower label in the upper left corner of each panel
   geom_text(
@@ -404,12 +400,12 @@ passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1
     nudge_y = -5
   ) +
   # Facet by radarID and year (keep original faceting)
-  facet_grid(year ~ radarID) +
+  facet_grid(year ~ radar_label) +
   # Add labels and title
   labs(
     title = paste0(paste(class_sel, collapse = "-"), ", pulseType ", pulseType_sel, ", threshold ", threshold_highest),
     subtitle = "Height vs Max Level with Density Isolines",
-    x = "Maximum Reflectivity Level (dBZ)",
+    x = "Maximum Level (dBm)",
     y = "Height (m)",
     caption = "Note: Isolines represent density quantiles (1%, 5%, 10%, 25%, 50%)"# 99%, 95%, 90%, 75%, 50%
   ) +
