@@ -38,7 +38,7 @@ If the aim is to compare the performance of a radar across time, then analyse ar
 
 ## Load Database Configuration
 
-```{r setup calibration 2025}
+```{r setup calibration}
 #| eval: true
 #| warning: false
 
