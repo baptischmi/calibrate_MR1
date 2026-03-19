@@ -30,6 +30,8 @@ dir.create(mainOutputDir, showWarnings = FALSE, recursive = TRUE)
 
 ```{r}
 radarID_siteName <- c("radarID", "siteName")[1]
+radarID_siteName_tag <- c("BS223_BS225_BS226_BS227", "CH")
+
 ```
 
 Multiple MR1 radar can run in close proximity (few meters apart) to check and correct their calibration. Analyses are then conducted per `r radarID_siteName` .
@@ -96,8 +98,8 @@ for(i in 1:nrow(db_config)) {
 
 ```{r set database user and pwd}
 #| warning: false
-dbUser =  'sa' # rstudioapi::askForPassword("Database user") # can be hard coded, e.g. 'sa'
-dbPwd = 'radar' # rstudioapi::askForPassword("Database password") # can be hard oded, e.g. '123pwd'
+dbUser =  rstudioapi::askForPassword("Database user") # can be hard coded, e.g. 'sa'
+dbPwd = rstudioapi::askForPassword("Database password") # can be hard oded, e.g. '123pwd'
 
 ```
 
@@ -197,7 +199,8 @@ filtered_data <- echo %>%
     } else {
       class %in% class_sel
     }
-  )
+  )%>% 
+  mutate(radar_label =paste0("BS", substr(radarID, 1,3))) 
 ```
 
 ```{r get counts of echoes}
@@ -365,7 +368,6 @@ if(file.exists(file.path())){
 
 # Create a data frame with unique transmitPower values for each radarID and year combination
 transmitPower_labels <- filtered_data %>%
-  mutate(radar_label =paste0("BS", substr(radarID, 1,3))) %>% 
   group_by(radar_label, year) %>%
 #  group_by(radarID, year) %>%
   summarize(
@@ -421,7 +423,7 @@ passerine_plot <- ggplot(filtered_data, aes(x = feature14.maxLevel, y = feature1
 
 # Save the plot to a file
 # For a basic PNG file
-file_name <- paste0( "Dbz vs height for", paste(class_sel, collapse = "-"), ".png" )
+file_name <- paste0( "Dbz vs height for ", paste(class_sel, collapse = "-"), " in ", paste(radarID_siteName_tag, collapse = "-"), ".png" )
 ggsave(filename = file.path(mainOutputDir, file_name), 
        plot = passerine_plot, width = 12, height = 8, dpi = 300)
 
